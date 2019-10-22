@@ -2,7 +2,7 @@
 Razorpay Payment Gateway Integration for Drupal 7 Commerce module
 
 - Installation
-Install it like any other user Drupal 7 module
+  Install it like any other Drupal 7 module
 - Settings
   - First things first - Login to Razorpay and under Settings >> API Keys 
     create your key_id/key_secret pair. Note that, you need separate pairs

@@ -4,7 +4,7 @@ description = Provides Razorpay Payment Gateway Integration for Drupal 7
 
 core = 7.x
 
-version = "7.x-1.alpha"
+version = "7.x-1.beta1"
 
 package = Commerce
 

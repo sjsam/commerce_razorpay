@@ -1,6 +1,7 @@
 # commerce_razorpay
 Razorpay Payment Gateway Integration for Drupal 7 Commerce module
-
+- Features
+  Hosted checkout with a myriad of payment options.
 - Installation
   Install it like any other Drupal 7 module
 - Settings

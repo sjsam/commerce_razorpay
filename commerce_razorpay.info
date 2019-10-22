@@ -1,0 +1,13 @@
+name = Commerce Razorpay
+
+description = Provides Razorpay Payment Gateway Integration for Drupal 7
+
+core = 7.x
+
+version = "7.x-1.alpha"
+
+package = Commerce
+
+dependencies[] = commerce
+dependencies[] = commerce_payment
+

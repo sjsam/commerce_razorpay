@@ -1,0 +1,276 @@
+<?php
+
+/**
+ * @file
+ * Implements Razorpay Payment Gateway for Drupal Commerce.
+ */
+
+/**
+ * Register payment method.
+ */
+
+function commerce_razorpay_commerce_payment_method_info() {
+  $icon = _commerce_razorpay_icons();
+  $display_title = t('!logo', array('!logo' => $icon));
+  $payment_methods = array();
+  $payment_methods['commerce_razorpay'] = array(
+    'title' => t("Razorpay"),
+    'display_title' => $display_title,
+    'short_title' => 'Razorpay',
+    'description' => t("Payment method for Razorpay"),
+    'terminal' => FALSE,
+    'offsite' => TRUE,
+    'offsite_autoredirect' => TRUE,
+  );
+  return $payment_methods;
+}
+
+/**
+ * Administration forms form payment method.
+ */
+
+function commerce_razorpay_settings_form($settings = NULL) {
+  $form = array();
+  $enabled_currencies = variable_get("commerce_enabled_currencies");
+  $available_currencies = array();
+  foreach($enabled_currencies as $currency_name){
+	if ($currency_name!='0')
+	{
+		$available_currencies = (array)$available_currencies + array($currency_name=>$currency_name,);
+	}
+  }
+
+  $settings = (array) $settings + array(
+    'key_id' => '',
+    'key_secret' => '',
+    'display_currency' => 'INR',
+    'description' => '',	
+    'razorpay_server' => 'https://api.razorpay.com/v1/checkout/embedded',
+  );
+
+  $form['key_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Razorpay Key ID'),
+    '#description' => t('Note that you should generate separate ID/Secret pairs for Live and Test modes.'),
+    '#default_value' => $settings['key_id'],
+    '#required' => TRUE,
+  );
+
+  $form['key_secret'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Razorpay Key Secret'),
+    '#default_value' => $settings['key_secret'],
+    '#required' => TRUE,
+  );
+  
+    $form['description'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Your company slogan'),
+    '#description' => t('Your company slogan/personalized greetings to be shown in the checkout page'),
+    '#default_value' => $settings['description'],
+    '#required' => TRUE,
+  );
+
+  $form['display_currency'] = array(
+    '#type' => 'select',
+    '#title' => t('Currency'),
+    '#description' => t('In which currency are your transactions?'),
+    '#options' => $available_currencies,
+    '#default_value' => $settings['display_currency'],
+  );
+
+  $form['razorpay_server'] = array(
+    '#type' => 'hidden',
+    '#value' => $settings['razorpay_server'],
+  );
+
+  return $form;
+}
+
+/**
+ * Ask for Razorpay redirect form.
+ */
+ 
+
+function commerce_razorpay_redirect_form($form, &$form_state, $order, $payment_method) {
+    
+  $razorpay_path = drupal_get_path('module','commerce_razorpay');
+	require_once( $razorpay_path . '/includes/Razorpay.php');
+				
+	$api = new Razorpay\Api\Api($payment_method["settings"]["key_id"], $payment_method["settings"]["key_secret"]);
+  // An entity metadata wrapper allows us to have easy and uniform access to values
+	$order_wrapper = entity_metadata_wrapper('commerce_order',$order);
+	$order_total = $order_wrapper->commerce_order_total->value();
+	$order_data = [
+		'receipt'         => $order->order_number,
+		'amount'          => $order_total["amount"],
+		'currency'        => $order_total["currency_code"],
+		'payment_capture' => 1 // auto capture
+	];
+	
+	$razorpay_order = $api->order->create($order_data);
+
+	$razorpay_order_id = $razorpay_order['id'];
+
+  
+  // The key id that will be passed to the Razorpay server for processing.
+  $form['key_id'] = array(
+  	'#type' => 'hidden',
+  	'#attributes' => array('name' => 'key_id'),
+  	'#value' => $payment_method["settings"]["key_id"],
+  );
+  
+  $site_name = variable_get('site_name','');
+  // The company name passed to Razorpay server for processing.
+  $form['name'] = array(
+  	'#type' => 'hidden',
+  	'#attributes' => array('name' => 'name'),
+  	'#value' => $site_name,
+  );
+  
+  // The description that will be shown at  Razorpay payment processing page.
+  $form['description'] = array(
+  	'#type' => 'hidden',
+  	'#attributes' => array('name' => 'description'),
+  	'#value' => $payment_method["settings"]["description"],
+  );
+  // The razorpay prefill - contact
+  $form['contact'] = array(
+    '#type' => 'hidden',
+    '#attributes' => array('name' => 'prefill[contact]'),
+    '#value' => '9495061623',
+  ); 
+  // The razorpay prefill - email
+  $form['email'] = array(
+    '#type' => 'hidden',
+    '#attributes' => array('name' => 'prefill[email]'),
+    '#value' => 'sjsam@tangledweb.in',
+  ); 
+  // The Razorpay order id.
+  $form['order_id'] = array(
+  	'#type' => 'hidden',
+  	'#attributes' => array('name' => 'order_id'),
+  	'#value' => $razorpay_order_id,
+  );
+  
+  // The Razorpay callback url. This is where the user is redirected to from the Razorpay server after the transaction
+  $form['callback_url'] = array(
+  	'#type' => 'hidden',
+  	'#attributes' => array('name' => 'callback_url'),
+  	'#value' => url('checkout/' . $order->order_id . '/payment/return/' . $order->data['payment_redirect_key'], array('absolute' => TRUE)),
+  );
+  
+  // The Razorpay cancel url. This is where the user is redirected to from the Razorpay server when they cancel a payment.
+  $form['cancel_url'] = array(
+  	'#type' => 'hidden',
+  	'#attributes' => array('name' => 'cancel_url'),
+  	'#value' => url('checkout/' . $order->order_id . '/payment/back/' . $order->data['payment_redirect_key'], array('absolute' => TRUE)),
+  ); 
+  
+  $form['#action'] = $payment_method['settings']['razorpay_server'];
+   return $form;
+ }
+
+
+
+/**
+ * Implements hook_redirect_form_validate().
+ */
+function commerce_razorpay_redirect_form_validate($order, $payment_method) {
+  $razorpay_path = drupal_get_path('module','commerce_razorpay');
+	require_once( $razorpay_path . '/includes/Razorpay.php');
+	
+	$success = true;
+  if(empty($_POST["error"]) === false) 
+  {
+    $success = false;
+    $error = 'transaction failed with error '. $_POST['error']['code'] . '. ' . $_POST['error']['description'];
+  }  
+
+	if (empty($_REQUEST['razorpay_payment_id']) === false)    
+	{
+		$api = new Razorpay\Api\Api($payment_method["settings"]["key_id"], $payment_method["settings"]["key_secret"]);
+		try { 
+			// Please note that the razorpay order ID must  
+			// come from a trusted source (session here, but
+			// could be database or something else)             
+			$attributes = array(
+					'razorpay_order_id' => $_REQUEST['razorpay_order_id'], 
+					'razorpay_payment_id' => $_REQUEST['razorpay_payment_id'],
+					'razorpay_signature' => $_REQUEST['razorpay_signature']      
+		 );                                                             
+																																	
+		 $api->utility->verifyPaymentSignature($attributes);
+    }
+    catch(Razorpay\Api\Errors\SignatureVerificationError $e) {
+        $success = false;
+        $error = 'transaction failed with error '. $e->getMessage();
+    }
+  }
+
+  if ($success === true) {
+    // Transaction is successful
+    $order_status = "Success";
+    commerce_razorpay_transaction($order, $payment_method, $order_status);
+    return drupal_set_message(t('Thank you for shopping with us. Your account has been charged and your transaction is successful.'));
+    // Here you need to put in the routines for a successful.
+    // transaction such as sending an email to customer,
+    // setting database status, informing logistics etc etc.
+  }
+  else{
+    // Traansaction failed. However, from a commerce standpoint, every transaction need to be logged.
+    $order_status = "Failed";
+    commerce_razorpay_transaction($order, $payment_method, $order_status);
+    return drupal_set_message(t('Thank you for shopping with us. However, %error',array('%error'=>$error)),'error');
+  }
+
+}
+
+
+/**
+ * Razorpay finish payment
+ */
+function commerce_razorpay_transaction($order, $payment_method, $order_status) {
+  $wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $currency = $wrapper->commerce_order_total->currency_code->value();
+  $amount = $wrapper->commerce_order_total->amount->value();
+  $transaction = commerce_payment_transaction_new('commerce_razorpay', $order->order_id);
+  $transaction->instance_id = isset($payment_method['instance_id']) ? $payment_method['instance_id'] : '';
+  $transaction->amount = $amount;
+  $transaction->currency_code = $currency;
+  // Succeessful.
+  if($order_status === "Success") {
+    $transaction->remote_status = t('Success');
+    $transaction->message = t('Payment received at') . ' ' . date("d-m-Y H:i:s", REQUEST_TIME);
+    $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+  }
+  elseif($order_status === "Aborted"){
+    // Batch process - Aborted orders.
+    $transaction->remote_status = t('Aborted');
+    $transaction->message = t('Payment pending at') . ' ' . date("d-m-Y H:i:s", REQUEST_TIME);
+    $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+  }
+  elseif($order_status === "Failure"){
+    // Failed transaction.
+    $transaction->remote_status = t('Failure');
+    $transaction->message = t('Payment failed at') . ' ' . date("d-m-Y H:i:s", REQUEST_TIME);
+    $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+  }
+  commerce_payment_transaction_save($transaction);
+}
+
+
+/**
+ * Returns Razorpay icon image location.
+ */
+function _commerce_razorpay_icons() {
+  $variable = array(
+    'path' => drupal_get_path('module', 'commerce_razorpay') . '/images/' . 'razorpay_logo.png',
+    'title' => 'Razorpay',
+    'alt' => 'Razorpay',
+    'attributes' => array(
+      'class' => array('commerce-razorpay-icon'),
+    ),
+  );
+  return theme('image', $variable);
+}

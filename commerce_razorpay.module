@@ -87,13 +87,14 @@ function commerce_razorpay_settings_form($settings = NULL) {
   return $form;
 }
 
+
 /**
  * Ask for Razorpay redirect form.
  */
  
 
 function commerce_razorpay_redirect_form($form, &$form_state, $order, $payment_method) {
-    
+  $form_bingo = $form;  
   $razorpay_path = drupal_get_path('module','commerce_razorpay');
 	require_once( $razorpay_path . '/includes/Razorpay.php');
 				
@@ -138,13 +139,14 @@ function commerce_razorpay_redirect_form($form, &$form_state, $order, $payment_m
   $form['contact'] = array(
     '#type' => 'hidden',
     '#attributes' => array('name' => 'prefill[contact]'),
-    '#value' => '9495061623',
+    '#value' => $_SESSION['razorpay_contact'],
   ); 
+  
   // The razorpay prefill - email
   $form['email'] = array(
     '#type' => 'hidden',
     '#attributes' => array('name' => 'prefill[email]'),
-    '#value' => 'sjsam@tangledweb.in',
+    '#value' => $order->mail,
   ); 
   // The Razorpay order id.
   $form['order_id'] = array(
@@ -177,6 +179,8 @@ function commerce_razorpay_redirect_form($form, &$form_state, $order, $payment_m
  * Implements hook_redirect_form_validate().
  */
 function commerce_razorpay_redirect_form_validate($order, $payment_method) {
+  // We no longer need $_SESSION['razorpay_contact']
+  unset($_SESSION['razorpay_contact']);
   $razorpay_path = drupal_get_path('module','commerce_razorpay');
 	require_once( $razorpay_path . '/includes/Razorpay.php');
 	
@@ -259,6 +263,39 @@ function commerce_razorpay_transaction($order, $payment_method, $order_status) {
   commerce_payment_transaction_save($transaction);
 }
 
+/*
+ * Implements hook_form_FORM_ID_alter()    
+ */
+function commerce_razorpay_form_commerce_checkout_form_checkout_alter(&$form, &$form_state, $form_id) {    
+    $form['contact'] = array(    
+    '#type' => 'fieldset',    
+    '#title' => t('Phone number'),    
+    '#collapsible' => 0,    
+    '#collapsed' => 0,    
+    '#required' => TRUE,    
+    '#weight'=>1,    
+  );    
+    
+  $form['contact']['number']= array(    
+    '#type' => 'textfield',    
+    '#title' => t('Your contact number'),    
+    '#description' => t('Enter your phone number with the country code'),    
+    '#required' => TRUE,    
+    '#default' => isset($form_state['contact_phone'])?$form_state['contact_phone']:'',
+    '#weight'=>0,    
+  );    
+  $form['buttons']['#weight'] = 10; 
+  // Add a submit handler  
+  array_push($form['buttons']['continue']['#submit'],'commerce_razorpay_persist_contact_phone');
+} 
+
+/*
+ * We need to persist the phone number captured at checkout form till we pass the same to 
+ */
+function  commerce_razorpay_persist_contact_phone($form,&$form_state) {
+  // We wish the contact number to persist till we assemble the data needed for Razorpay
+  $_SESSION['razorpay_contact'] = $form['contact']['number']['#value'];
+}
 
 /**
  * Returns Razorpay icon image location.

@@ -31,7 +31,7 @@ function commerce_razorpay_commerce_payment_method_info() {
 
 function commerce_razorpay_settings_form($settings = NULL) {
   $form = array();
-  $enabled_currencies = variable_get("commerce_enabled_currencies");
+  $enabled_currencies = variable_get("commerce_enabled_currencies",array('USD' => 'USD'));
   $available_currencies = array();
   foreach($enabled_currencies as $currency_name){
 	if ($currency_name!='0')
